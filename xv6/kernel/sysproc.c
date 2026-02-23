@@ -107,3 +107,30 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// Translate a virtual address into the underlying physical memory address
+uint64
+sys_va2pa(void)
+{
+  uint64 va;
+  argaddr(0, &va);
+
+  const uint64 MAXPA = 0xFFFFFFFFFFFFFFFF;
+
+  // Invalid virtual address
+  if(va >= MAXVA) {
+    return MAXPA;
+  }
+
+  // Get physical page base address
+  struct proc *p = myproc();
+  uint64 pa = walkaddr(p->pagetable, va);
+
+  // Invalid physical address
+  if(pa == 0)
+    return MAXPA;
+
+  // Add page offset (4KB page --> 12 bits to offset)
+  pa = pa | (va & 0xFFF);
+  return pa;
+}
