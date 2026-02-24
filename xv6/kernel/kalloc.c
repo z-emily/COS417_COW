@@ -12,6 +12,7 @@
 // Returns index number of page-aligned address
 #define PA2INDEX(pa) (((uint64)pa - KERNBASE )/ PGSIZE)
 #define MAXPAGES ((PHYSTOP-KERNBASE) / PGSIZE)
+#define MAXREFERENCES 255
 
 void freerange(void *pa_start, void *pa_end);
 
@@ -22,9 +23,10 @@ struct run {
   struct run *next;
 };
 
-struct {
+static struct {
   struct spinlock lock;
   struct run *freelist;
+  uint8 page_refcount[MAXPAGES];
 } kmem;
 
 void
@@ -55,14 +57,23 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
-  // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
-
-  r = (struct run*)pa;
-
   acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
+
+  // Only decrement if there are references 
+  if(kmem.page_refcount[PA2INDEX(pa)] > 0){
+    --kmem.page_refcount[PA2INDEX(pa)];
+  }
+
+  // Only free if no references left
+  if(kmem.page_refcount[PA2INDEX(pa)] == 0){
+    // Fill with junk to catch dangling refs.
+    memset(pa, 1, PGSIZE);
+
+    r = (struct run*)pa;
+
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+  }
   release(&kmem.lock);
 }
 
@@ -78,9 +89,33 @@ kalloc(void)
   r = kmem.freelist;
   if(r)
     kmem.freelist = r->next;
-  release(&kmem.lock);
 
-  if(r)
+  if(r) {
+    kmem.page_refcount[PA2INDEX(r)] = 1;
     memset((char*)r, 5, PGSIZE); // fill with junk
+  }
+  release(&kmem.lock);
   return (void*)r;
+}
+
+// Increments an existing physical page reference count by one.
+// Returns the same physical page address. 0 in case a new reference
+// to this page could not be created.
+void*
+kdup(void *pa)
+{
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    return 0;
+
+  acquire(&kmem.lock);
+  int idx = PA2INDEX(pa);
+  // Page already freed or at max references
+  if (kmem.page_refcount[idx] <= 0 ||
+      kmem.page_refcount[idx] == MAXREFERENCES) {
+    release(&kmem.lock);
+    return 0;
+  }
+  ++kmem.page_refcount[PA2INDEX(pa)];
+  release(&kmem.lock);
+  return pa;
 }
