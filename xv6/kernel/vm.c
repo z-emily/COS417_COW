@@ -526,6 +526,49 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
   return mem;
 }
 
+// Create a copy of the original page, modify the ptable to reference
+// the new page, restore the write bit, decrease the reference count 
+uint64
+cowfault(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+  uint64 pa;
+  uint flags;
+  uint64 mem;
+  struct proc *p = myproc();
+
+  if (va >= p->sz) {
+    return 0;
+  }
+  va = PGROUNDDOWN(va);
+
+  if ((pte = walk(pagetable, va, 0)) == 0) {
+    return 0;
+  }
+
+  // Must be valid and COW
+  if ((*pte & PTE_V) == 0 || (*pte & PTE_COW) == 0) {
+    return 0;
+  }
+
+  pa = PTE2PA(*pte);
+  flags = PTE_FLAGS(*pte);
+
+  // Allocate new page and copy memory
+  mem = (uint64) kalloc();
+  if(mem == 0) {
+    return 0;
+  }
+  memmove((void *)mem, (char*)pa, PGSIZE);
+
+  // Decrement reference count of old page
+  kfree((void*)pa);
+
+  // Update PTE: set new physical address, restore write bit, clear cow bit
+  *pte = PA2PTE(mem) | ((flags | PTE_W) & ~PTE_COW);
+  return mem;
+}
+
 int
 ismapped(pagetable_t pagetable, uint64 va)
 {
