@@ -1,10 +1,10 @@
 /*--------------------------------------------------------------------*/
 /* COS417 Assignment 3 - Copy-on-Write                                */
-/* Author: Your Name Here                                             */
-/* netID: Your netID Here                                             */
-/* AI disclosure: Did you use AI for this assignment? Yes or No.      */
-/* AI explanation: If you answered yes to previous question, please   */
-/* describe your usage.                                               */
+/* Author: Emily Zhou                                                 */
+/* netID: ez3867                                                      */
+/* AI disclosure: Yes                                                 */
+/* AI explanation: To help me understand the existing functions I was */
+/* modifying to write the new ones                                    */
 /*--------------------------------------------------------------------*/
 
 #include "param.h"
